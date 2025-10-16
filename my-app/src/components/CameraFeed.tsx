@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import type { CameraFeedProps } from "./CameraFeed.type";
 const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
@@ -7,6 +7,34 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
   onCapture,
   onReset,
 }) => {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const handleCaptureClick = () => {
+    const img = imgRef.current;
+    const canvas = canvasRef.current;
+    
+    if (img && canvas) {
+      // Đặt kích thước canvas bằng kích thước ảnh thực
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        // Vẽ frame hiện tại từ img lên canvas
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // Chuyển canvas thành blob JPEG
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+            onCapture(file); // Gọi hàm xử lý từ props
+          }
+        }, "image/jpeg", 0.9); // quality = 0.9
+      }
+    }
+  };
+
   return (
     <section className="flex flex-col gap-4 p-6 w-full bg-white rounded-2xl border border-gray-100 border-solid shadow-sm">
       <div className="flex justify-between items-center">
@@ -18,12 +46,17 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
           <div className="w-2 h-2 bg-emerald-500 rounded-full" />
         </div>
       </div>
+      
       <div className="overflow-hidden relative w-full bg-gray-900 rounded-xl h-[357px]">
         <img
+          ref={imgRef}
           src={`${backendUrl}/api/v1/video_feed`}
           alt="Live camera feed"
           className="object-cover size-full"
+          crossOrigin="anonymous" // Cho phép canvas vẽ từ img
         />
+        <canvas ref={canvasRef} style={{ display: "none" }} />
+        
         <div className="flex absolute top-4 left-4 gap-2 items-center px-3 py-1.5 rounded-lg bg-black bg-opacity-50">
           <svg width="16" height="14" viewBox="0 0 16 15" fill="none">
             <path
@@ -33,16 +66,19 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
           </svg>
           <span className="text-sm text-white">1080p • 30fps</span>
         </div>
+        
         {isAnalyzing && (
           <div className="absolute right-4 bottom-4 px-3 py-1.5 bg-emerald-500 rounded-lg">
             <span className="text-sm font-medium text-white">Analyzing...</span>
           </div>
         )}
       </div>
+      
       <div className="flex gap-3 justify-center items-center">
         <button
           className="flex gap-2 items-center px-4 py-2 text-base text-white bg-emerald-500 rounded-lg cursor-pointer border-[none]"
-          onClick={onCapture as unknown as React.MouseEventHandler<HTMLButtonElement>}
+          onClick={handleCaptureClick}
+          disabled={isAnalyzing}
         >
           <svg width="16" height="16" viewBox="0 0 17 17" fill="none">
             <path
@@ -55,6 +91,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
         <button
           className="flex gap-2 items-center px-4 py-2 text-base text-gray-600 bg-gray-100 rounded-lg cursor-pointer border-[none]"
           onClick={onReset}
+          disabled={isAnalyzing}
         >
           <svg width="16" height="16" viewBox="0 0 17 17" fill="none">
             <path
