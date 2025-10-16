@@ -1,5 +1,6 @@
 import React from "react";
 import type { CameraFeedProps } from "./CameraFeed.type";
+const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
 export const CameraFeed: React.FC<CameraFeedProps> = ({
   isAnalyzing,
@@ -19,7 +20,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
       </div>
       <div className="overflow-hidden relative w-full bg-gray-900 rounded-xl h-[357px]">
         <img
-          src="https://api.builder.io/api/v1/image/assets/TEMP/9f2c4671ebde0b8b771a3b381bd62ea09cc70fdc"
+          src={`${backendUrl}/api/v1/video_feed`}
           alt="Live camera feed"
           className="object-cover size-full"
         />
@@ -41,7 +42,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
       <div className="flex gap-3 justify-center items-center">
         <button
           className="flex gap-2 items-center px-4 py-2 text-base text-white bg-emerald-500 rounded-lg cursor-pointer border-[none]"
-          onClick={onCapture}
+          onClick={onCapture as unknown as React.MouseEventHandler<HTMLButtonElement>}
         >
           <svg width="16" height="16" viewBox="0 0 17 17" fill="none">
             <path

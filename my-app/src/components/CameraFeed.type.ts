@@ -1,5 +1,5 @@
 export interface CameraFeedProps {
   isAnalyzing: boolean;
-  onCapture: () => void;
+  onCapture: (imageFile: File) => void | Promise<void>;
   onReset: () => void;
 }
