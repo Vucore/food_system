@@ -74,7 +74,7 @@ async def capture(file: UploadFile = File(...),  user_id: str = Form("anonymous"
         inserted_id = db["foods"].insert_one(fake_ai_result).inserted_id
 
         # Truy vấn chỉ lấy món ăn của user hiện tại
-        foods_cursor = db["foods"].find({"user_id": user_id})
+        foods_cursor = db["foods"].find({"user_id": user_id}).sort([("_id", -1)])
         foods = [serialize_mongo_document(doc) for doc in foods_cursor]
         total_calories = sum(doc.get("calories", 0) for doc in foods)
         return {
