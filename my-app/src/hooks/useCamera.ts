@@ -1,7 +1,33 @@
 import { useState } from 'react';
+import type { Food } from '../components/NutriVision.type';
 
-export function useCamera() {
+export interface UseCameraResult {
+  isAnalyzing: boolean;
+  handleCapture: (imageFile: File) => Promise<void>;
+  handleReset: () => void;
+  detectedFoods: Food[];
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+}
+
+function getUserId(): string {
+  let userId = localStorage.getItem("user_id");
+  if (!userId) {
+    userId = "user_" + Math.random().toString(36).substring(2, 10);
+    localStorage.setItem("user_id", userId);
+  }
+  return userId;
+}
+
+export function useCamera(): UseCameraResult {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [detectedFoods, setDetectedFoods] = useState<Food[]>([]);
+  const [totalCalories, setTotalCalories] = useState<number>(0);
+  const [totalProtein, setTotalProtein] = useState<number>(0);
+  const [totalCarbs, setTotalCarbs] = useState<number>(0);
+  const [totalFat, setTotalFat] = useState<number>(0);
 
   // Nhận file ảnh từ CameraFeed component
   const handleCapture = async (imageFile: File) => {
@@ -11,6 +37,7 @@ export function useCamera() {
       // Gửi ảnh lên backend để xử lý
       const formData = new FormData();
       formData.append("file", imageFile);
+      formData.append("user_id", getUserId()); 
 
       const res = await fetch("http://localhost:8000/api/v1/capture", {
         method: "POST",
@@ -19,8 +46,25 @@ export function useCamera() {
 
       if (res.ok) {
         const data = await res.json();
-        console.log("Kết quả từ backend:", data);
-        // Xử lý kết quả phân tích ở đây (cập nhật state foods, nutrition, etc.)
+        // Chuẩn hoá dữ liệu trả về từ backend thành Food[]; nếu thiếu id/icon/color thì gán mặc định
+        const foods: Food[] = (data?.detected_foods ?? []).map((f: any, idx: number) => ({
+          id: f.id ?? idx + 1,
+          name: f.name ?? 'Unknown',
+          portion: f.portion ?? '',
+          calories: Number(f.calories ?? 0),
+          protein: Number(f.protein ?? 0),
+          carbs: Number(f.carbs ?? 0),
+          fat: Number(f.fat ?? 0),
+          icon: f.icon ?? 'food',
+          color: f.color ?? '#E5E7EB',
+        }));
+        setDetectedFoods(foods);
+
+        const totalsProvided = typeof data?.total_calories === 'number';
+        setTotalCalories(totalsProvided ? data.total_calories : foods.reduce((s, x) => s + (x.calories || 0), 0));
+        setTotalProtein(foods.reduce((s, x) => s + (x.protein || 0), 0));
+        setTotalCarbs(foods.reduce((s, x) => s + (x.carbs || 0), 0));
+        setTotalFat(foods.reduce((s, x) => s + (x.fat || 0), 0));
       } else {
         console.error("Lỗi từ backend:", res.status);
       }
@@ -33,8 +77,13 @@ export function useCamera() {
 
   const handleReset = () => {
     setIsAnalyzing(false);
-    // Reset các dữ liệu phân tích khác nếu cần
+    setDetectedFoods([]);
+    setTotalCalories(0);
+    setTotalProtein(0);
+    setTotalCarbs(0);
+    setTotalFat(0);
+    localStorage.removeItem("user_id");
   };
 
-  return { isAnalyzing, handleCapture, handleReset };
+  return { isAnalyzing, handleCapture, handleReset, detectedFoods, totalCalories, totalProtein, totalCarbs, totalFat };
 }
