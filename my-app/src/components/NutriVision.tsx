@@ -1,57 +1,29 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Header } from "./Header";
 import { CameraFeed } from "./CameraFeed";
 import { DetectedFoods } from "./DetectedFoods";
 import { NutritionSummary } from "./NutritionSummary";
-import type { Food } from "./NutriVision.type";
 import { useCamera } from '../hooks/useCamera';
 
 
 export const NutriVision: React.FC = () => {
-  const { isAnalyzing, handleCapture, handleReset } = useCamera();
-  const [detectedFoods, setDetectedFoods] = useState<Food[]>([
-    {
-      id: 1,
-      name: "Grilled Chicken",
-      portion: "150g portion",
-      calories: 248,
-      protein: 46,
-      carbs: 0,
-      fat: 5,
-      icon: "chicken",
-      color: "#FFEDD5",
-    },
-    {
-      id: 2,
-      name: "Mixed Salad",
-      portion: "100g portion",
-      calories: 25,
-      protein: 2,
-      carbs: 4,
-      fat: 0,
-      icon: "salad",
-      color: "#D1FAE5",
-    },
-    {
-      id: 3,
-      name: "Steamed Rice",
-      portion: "80g portion",
-      calories: 103,
-      protein: 2,
-      carbs: 23,
-      fat: 0,
-      icon: "rice",
-      color: "#FEF9C3",
-    },
-  ]);
+  // Nhận dữ liệu thực từ hook thay vì dữ liệu mẫu
+  const {
+    isAnalyzing,
+    handleCapture,
+    handleReset,
+    detectedFoods,
+    totalCalories,
+    totalProtein,
+    totalCarbs,
+    totalFat,
+  } = useCamera();
+  useEffect(() => {
+    handleReset();
+  }, []);
 
-  // const [isAnalyzing, setIsAnalyzing] = useState(true);
-  const [isLiveFeedActive, setIsLiveFeedActive] = useState(true);
-  const [totalCalories, setTotalCalories] = useState(376);
-  const [totalProtein, setTotalProtein] = useState(50);
-  const [totalCarbs, setTotalCarbs] = useState(27);
-  const [totalFat, setTotalFat] = useState(5);
+  const [isLiveFeedActive] = useState(true);
 
 
   // const handleReset = () => {

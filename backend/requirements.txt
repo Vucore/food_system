@@ -1,1 +1,9 @@
 python -m uvicorn app.main:app --reload
+
+
+ls ~/.cache/huggingface/hub
+mongosh
+db.foods.deleteMany({})
+db.foods.find()
+show collections
+use food_system
