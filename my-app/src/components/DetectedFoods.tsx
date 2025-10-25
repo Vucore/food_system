@@ -15,7 +15,7 @@ export const DetectedFoods: React.FC<DetectedFoodsProps> = ({
           {detectedFoods.length} items found
         </span>
       </div>
-      <div className="overflow-auto w-full">
+      <div className="overflow-auto w-full custom-scroll" style={{ maxHeight: "320px" }}>
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-solid border-b-gray-100">
@@ -36,6 +36,7 @@ export const DetectedFoods: React.FC<DetectedFoodsProps> = ({
               </th>
             </tr>
           </thead>
+          
           <tbody>
             {detectedFoods?.map((food, index) => (
               <tr
