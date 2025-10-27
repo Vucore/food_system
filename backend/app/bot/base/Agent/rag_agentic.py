@@ -163,9 +163,9 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
 class RAGAgentic:
-    def __init__(self, llm):
+    def __init__(self):
         # Load model và tokenizer từ Hugging Face
-        self.llm = llm
+        # self.llm = llm
         # Prompt cơ bản
         self.prompt_template = PromptTemplate(
             input_variables=["title", "ingredients", "preparation", "cookingSteps", "howToServe", "tips", "query"],
@@ -194,147 +194,109 @@ class RAGAgentic:
             """
         )
 
-        self.functions_name = ["crawl_monngonmoingay"]
+        self.functions_name = ["crawl_monngonmoingay_query", "crawl_monngonmoingay_url"]
 
-    def call(self, query: str):
-        function_name = self.functions_name[0]
-        arguments = {"query": query}
-        results = function_router(function_name, arguments)
-        print(f"Function '{function_name}' returned results: {results}")
-        # Nếu chỉ có 1 kết quả
-        if isinstance(results, list) and results and results[0].get("nums") == "only":
-            metadata = results[0]
-            prompt = self.prompt_template.format(
-                title=metadata.get("title", ""),
-                ingredients=metadata.get("ingredients", ""),
-                preparation=metadata.get("preparation", ""),
-                cookingSteps=metadata.get("cookingSteps", ""),
-                howToServe=metadata.get("howToServe", ""),
-                tips=metadata.get("tips", ""),
-                query=query
-            )
+    # def call(self, query: str):
+    #     function_name = self.functions_name[0]
+    #     arguments = {"query": query}
+    #     results = function_router(function_name, arguments)
+    #     print(f"Function '{function_name}' returned results: {results}")
+    #     # Nếu chỉ có 1 kết quả
+    #     if isinstance(results, list) and results and results[0].get("nums") == "only":
+    #         metadata = results[0]
+    #         prompt = self.prompt_template.format(
+    #             title=metadata.get("title", ""),
+    #             ingredients=metadata.get("ingredients", ""),
+    #             preparation=metadata.get("preparation", ""),
+    #             cookingSteps=metadata.get("cookingSteps", ""),
+    #             howToServe=metadata.get("howToServe", ""),
+    #             tips=metadata.get("tips", ""),
+    #             query=query
+    #         )
 
-            response = self.llm.invoke(prompt)
-            return response
+    #         response = self.llm.invoke(prompt)
+    #         return response
 
-        # Nếu nhiều món
-        elif isinstance(results, list) and results and results[0].get("nums") == "multiple":
-            return "Tìm thấy nhiều món:\n" + "\n".join(
-                f"- {item['title']}: {item['url']}" for item in results
-            )
+    #     # Nếu nhiều món
+    #     elif isinstance(results, list) and results and results[0].get("nums") == "multiple":
+    #         return "Tìm thấy nhiều món:\n" + "\n".join(
+    #             f"- {item['title']}: {item['url']}" for item in results
+    #         )
 
+    #     else:
+    #         return results
+    def call(self, query: str = None, url: str = None):
+        if url and not query:
+            function_name = self.functions_name[1]
+            arguments = {"url": url}
+            results = function_router(function_name, arguments)
+            print(f"Function '{function_name}' returned results: {results}")
+            if isinstance(results, dict) and results:
+                metadata = results
+                return {
+                    "status": "only",
+                    "message": f"Tìm thấy món: {metadata.get('title', 'Không rõ tên')}",
+                    "data": {
+                        "title": metadata.get("title", ""),
+                        "ingredients": metadata.get("ingredients", []),
+                        "preparation": metadata.get("preparation", []),
+                        "cookingSteps": metadata.get("cookingSteps", []),
+                        "howToServe": metadata.get("howToServe", []),
+                        "tips": metadata.get("tips", []),
+                    },
+                }
+
+            # ---- Nếu không có kết quả hoặc sai định dạng ----
+            return {
+                "status": "error",
+                "message": "Không tìm thấy dữ liệu phù hợp.",
+            }
+        elif query and not url: 
+            function_name = self.functions_name[0]
+            arguments = {"query": query}
+            results = function_router(function_name, arguments)
+            print(f"Function '{function_name}' returned results: {results}")
+            if isinstance(results, list) and results:
+                first = results[0]
+                nums_type = first.get("nums", "")
+
+                # ---- Nếu chỉ có 1 món ----
+                if nums_type == "only":
+                    metadata = first
+                    return {
+                        "status": "only",
+                        "message": f"Tìm thấy 1 món: {metadata.get('title', 'Không rõ tên')}",
+                        "data": {
+                            "title": metadata.get("title", ""),
+                            "ingredients": metadata.get("ingredients", []),
+                            "preparation": metadata.get("preparation", []),
+                            "cookingSteps": metadata.get("cookingSteps", []),
+                            "howToServe": metadata.get("howToServe", []),
+                            "tips": metadata.get("tips", []),
+                        },
+                    }
+
+                # ---- Nếu có nhiều món ----
+                elif nums_type == "multiple":
+                    return {
+                        "status": "multiple",
+                        "message": f"Tìm thấy {len(results)} món tương tự.",
+                        "options": [
+                            {
+                                "title": item.get("title", "Không rõ tên"),
+                                "url": item.get("url", "#")
+                            }
+                            for item in results
+                        ],
+                    }
+
+            # ---- Nếu không có kết quả hoặc sai định dạng ----
+            return {
+                "status": "error",
+                "message": "Không tìm thấy dữ liệu phù hợp.",
+            }
         else:
-            return results
-
-
-
-
-
-# from langchain.prompts import PromptTemplate
-# from fastapi.responses import StreamingResponse
-# from ..RAG.file_loader import DocumentLoader
-# from ..RAG.setup_spilitter import TextSplitter
-# from ..RAG.vectorstore import VectorDB
-# from ..RAG.setup_retriever import Retriever
-# import asyncio
-
-# class RAGAgent():
-#     def __init__(self, llm):
-#         self.llm = llm
-#         self.document_loader = DocumentLoader()
-#         self.splitter_class = TextSplitter()
-#         self.vectorstore = None
-#         self.retriever_class = Retriever()
-#         self.retriever = None
-#         self.ensemble_retriever = None
-#         self.process_documents()
-#         self.build_ensemble_retriever()
-
-#     def process_documents(self):
-#         # documents = self.pdf_loader.load_pdf_docs()
-#         documents = self.document_loader.load_markdown_docs()
-#         docs = self.splitter_class.split_documents(documents=documents)
-#         self.vectorstore = VectorDB(docs=docs,
-#                                           embedding=self.embedding
-#                                         ).get_vectorstore()
-#         self.retriever = self.retriever_class.build_retriever(docs=docs, k=3)
-
-#     def build_ensemble_retriever(self):
-#         self.ensemble_retriever = self.retriever_class.get_ensemble_retriever(vectorstore=self.vectorstore, retriever=self.retriever)
-
-#         self.custom_prompt = PromptTemplate(
-#             input_variables=["context", "question"],
-#             template="""
-#                     Bạn là một trợ lý AI chuyên về cảnh báo lũ lụt, mực nước và lượng mưa hoặc các chỉ số thời tiết được cung cấp tài liệu.
-#                     Chỉ dựa vào thông tin tìm được từ công cụ và kiến thức nội tại của bạn về chủ đề này để trả lời.
-#                     Nếu không tìm thấy thông tin trong tài liệu, hãy nói rằng bạn không có thông tin đó trong tài liệu được cung cấp.
-#                     Luôn trả lời bằng tiếng Việt một cách rõ ràng và chi tiết nhất có thể dựa trên thông tin có được, không thêm bất kỳ văn bản nào khác.
-                    
-#                     Thông tin:
-#                     {context}
-
-#                     Câu hỏi:
-#                     {question}
-#                     Hãy trả lời bằng tiếng Việt!
-#                     """,
-#                     )
-
-#     def run_rag(self, query: str):
-#         async def stream_answer(llm, prompt: str):
-#             for chunk in llm.stream(prompt):
-#                 if hasattr(chunk, "content"):
-#                     for token in chunk.content:
-#                         yield token
-#                         await asyncio.sleep(0.002)
-
-#         async def generate_response():
-#             '''Retrieval'''
-#             docs = self.ensemble_retriever.invoke(query)  
-#             # In thông tin chi tiết về từng document
-#             print("\n=== Retrieved Documents ===")
-#             for i, doc in enumerate(docs, 1):
-#                 print(f"\nDocument {i}:")
-#                 print(f"Content: {doc.page_content}")
-#                 print(f"Metadata: {doc.metadata}")
-#             print("=" * 50)
-
-#             '''Context'''
-#             context = "\n".join([doc.page_content for doc in docs])
-#             max_context_length = 10000  
-#             if len(context) > max_context_length:
-#                 context = context[:max_context_length]
-
-#             '''Prompt'''
-#             prompt = self.custom_prompt.format(context=context, question=query)
-
-#             response_text = ""
-#             async for token in stream_answer(self.llm, prompt):
-#                 response_text += token
-#                 yield token
-
-#         return StreamingResponse(generate_response(), media_type="text/plain; charset=utf-8")
-
-#     def run_llm(self, query: str):
-#         async def stream_answer(llm, prompt: str):
-#             for chunk in llm.stream(prompt):
-#                 if hasattr(chunk, "content"):
-#                     for token in chunk.content:
-#                         yield token
-#                         await asyncio.sleep(0.002)
-#         prompt = "Hãy trả lời bằng tiếng Việt cho câu hỏi {}".format(query)
-        
-#         async def generate_response():
-#             response_text = ""
-#             async for token in stream_answer(self.llm, prompt):
-#                 response_text += token
-#                 yield token
-
-#             # Log the conversation after response is complete
-#             self.conversation_logger.log_conversation(
-#                 question=query,
-#                 answer=response_text,
-#                 rag_used=False,
-#                 response_type="chat"
-#             )
-
-#         return StreamingResponse(generate_response(), media_type="text/plain; charset=utf-8")
+            return {
+                "status": "error",
+                "message": "Không tìm thấy dữ liệu phù hợp.",
+            }
