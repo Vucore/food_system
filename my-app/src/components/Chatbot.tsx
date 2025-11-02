@@ -1,102 +1,55 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, X, Send, Bot } from 'lucide-react';
-
-interface RecipeSections {
-    title?: string[];
-    nguyenlieu?: string[];
-    soche?: string[];
-    thuchien?: string[];
-    howtouse?: string[];
-    tips?: string[];
-}
+import { useChatbotRecipe } from '../hooks/useChatbotRecipe';
+import type { RecipeSections } from './Chatbot.type';
 
 const Chatbot: React.FC = () => {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
-    const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<RecipeSections | null>(null);
-    const [error, setError] = useState('');
     const [multiResults, setMultiResults] = useState<{ title: string; url: string }[] | null>(null);
+    const { loading, error, setError, fetchRecipeByQuery, fetchRecipeByUrl } = useChatbotRecipe();
 
     const handleToggle = () => setOpen((prev) => !prev);
 
     const handleSelectDish = async (dishUrl: string, dishTitle: string) => {
-        setLoading(true);
-        setError('');
         setResult(null);
-
-        // Thêm delay nhẹ để tạo cảm giác chuyển mượt
-        await new Promise((r) => setTimeout(r, 300));
+        setMultiResults(null);
 
         try {
-            const res = await fetch('http://localhost:8000/api/v1/chatbot/recipe?url=' + encodeURIComponent(dishUrl));
-            if (!res.ok) throw new Error('Không tìm thấy món ăn hoặc lỗi server');
-            const data = await res.json();
-
-            if (data.status === "only") {
-                const item = data.data;
-                const mapped: RecipeSections = {
-                    title: dishTitle ? [dishTitle] : [],
-                    nguyenlieu: item.ingredients || [],
-                    soche: item.preparation || [],
-                    thuchien: item.cookingSteps || [],
-                    howtouse: item.howToServe || [],
-                    tips: item.tips || [],
-                };
-                // Mượt hơn: fade-out list, fade-in content
+            await new Promise((r) => setTimeout(r, 300));
+            const recipe = await fetchRecipeByUrl(dishUrl, dishTitle);
+            if (recipe) {
                 setMultiResults(null);
                 await new Promise((r) => setTimeout(r, 200));
-                setResult(mapped);
-            } else if (data.status === "error") {
-                setError(data.message || "Không tìm thấy món ăn phù hợp.");
-            } else {
-                setError("Dữ liệu trả về không hợp lệ.");
+                setResult(recipe);
             }
-        } catch (err: any) {
-            setError(err.message || 'Lỗi không xác định');
-        } finally {
-            setLoading(false);
+        } catch (err) {
+            console.error(err);
         }
     };
+
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         setError('');
         setResult(null);
+        setMultiResults(null);
+
         try {
-            const res = await fetch('http://localhost:8000/api/v1/chatbot/recipe?query=' + encodeURIComponent(query));
-            if (!res.ok) throw new Error('Không tìm thấy món ăn hoặc lỗi server');
-            const data = await res.json();
+            const { recipe, multiResults: results } = await fetchRecipeByQuery(query);
 
-            if (data.status === "only") {
-                const item = data.data;
-                const mapped: RecipeSections = {
-                    title: item.title || [],
-                    nguyenlieu: item.ingredients || [],
-                    soche: item.preparation || [],
-                    thuchien: item.cookingSteps || [],
-                    howtouse: item.howToServe || [],
-                    tips: item.tips || [],
-                };
-                setResult(mapped);
-            } else if (data.status === "multiple") {
-                setMultiResults(data.options);
-            } else if (data.status === "error") {
-                setError(data.message || "Không tìm thấy món ăn phù hợp.");
+            if (recipe) {
+                setResult(recipe);
             }
-            else {
-                setError("Dữ liệu trả về không hợp lệ.");
+            if (results) {
+                setMultiResults(results);
             }
-        } catch (err: any) {
-            setError(err.message || 'Lỗi không xác định');
-        } finally {
-            setLoading(false);
+        } catch (err) {
+            console.error(err);
         }
-
     };
-
     return (
         <div className="fixed bottom-6 right-6 z-50">
             {/* Nút mở chatbot */}

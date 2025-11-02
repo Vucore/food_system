@@ -1,23 +1,38 @@
-import React, { useMemo } from "react";
-import { useMapApiKey } from "../hooks/useMapApiKey";
-
-interface MapDirectionsProps {
-  selectedFood: any;
-  onClose: () => void;
-}
+import React, { useEffect, useState, useMemo } from "react";
+import type { MapDirectionsProps } from "./MapDirections.type";
 
 export const MapDirections: React.FC<MapDirectionsProps> = ({
   selectedFood,
   onClose,
 }) => {
-  const { apiKey, error, loading } = useMapApiKey();
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Lấy API Key từ backend
+  useEffect(() => {
+    const fetchApiKey = async () => {
+      try {
+        const response = await fetch(`http://localhost:8000/api/v1/config/maps-api-key`);
+        if (!response.ok) {
+          throw new Error("Không thể lấy API Key từ backend");
+        }
+        const data = await response.json();
+        setApiKey(data.apiKey);
+      } catch (err: any) {
+        setError(err.message);
+        console.error("Error fetching Maps API Key:", err);
+      }
+    };
+
+    fetchApiKey();
+  }, []);
 
   const mapUrl = useMemo(() => {
     if (!selectedFood?.address || !apiKey) return null;
     return `https://www.google.com/maps/embed/v1/place?key=${apiKey}&q=${encodeURIComponent(selectedFood.address)}`;
   }, [selectedFood?.address, apiKey]);
 
-  const hasError = selectedFood?.address && !mapUrl && apiKey === null && !loading;
+  const hasError = selectedFood?.address && !mapUrl && apiKey === null;
 
   return (
     <div className="w-full bg-white rounded-2xl border border-gray-100 shadow-lg p-6 animate-in fade-in slide-in-from-bottom-4">
@@ -50,12 +65,7 @@ export const MapDirections: React.FC<MapDirectionsProps> = ({
         className="rounded-xl overflow-hidden shadow-lg mb-4 bg-gray-100 flex items-center justify-center"
         style={{ height: "400px" }}
       >
-        {loading ? (
-          <div className="text-center text-gray-500">
-            <div className="animate-spin mb-2">⏳</div>
-            <p className="text-sm">Đang tải...</p>
-          </div>
-        ) : mapUrl ? (
+        {mapUrl ? (
           <iframe
             width="100%"
             height="400"

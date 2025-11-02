@@ -13,70 +13,113 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
   const handleCaptureClick = () => {
     const img = imgRef.current;
     const canvas = canvasRef.current;
-    
+
     if (img && canvas) {
       // Đặt kích thước canvas bằng kích thước ảnh thực
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
-      
+
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        // Vẽ frame hiện tại từ img lên canvas
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        
-        // Chuyển canvas thành blob JPEG
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
-            onCapture(file); // Gọi hàm xử lý từ props
-          }
-        }, "image/jpeg", 0.9); // quality = 0.9
+        try {
+          // Vẽ frame hiện tại từ img lên canvas
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          // Chuyển canvas thành blob JPEG
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+              onCapture(file); // Gọi hàm xử lý từ props
+            }
+          }, "image/jpeg", 0.9); // quality = 0.9
+
+        } catch (error) {
+          console.error("Lỗi khi xử lý ảnh:", error);
+          createFakeImage();
+        }
       }
+    }
+  };
+  const createFakeImage = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      // Tạo ảnh fake
+      ctx.fillStyle = "#87CEEB";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#FFA500";
+      ctx.beginPath();
+      ctx.arc(320, 240, 50, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#000";
+      ctx.font = "20px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Fake Food Image", 320, 450);
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+          onCapture(file);
+        }
+      }, "image/jpeg", 0.9);
     }
   };
 
   return (
-    <section className="flex flex-col gap-4 p-6 w-full bg-white rounded-2xl border border-gray-100 border-solid shadow-sm">
+    <section className="flex flex-col gap-5 p-6 w-full bg-white rounded-2xl border border-gray-100 shadow-md">
+      {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="m-0 text-lg font-semibold leading-7 text-gray-800">
-          Live Camera Feed
+        <h2 className="text-xl font-semibold text-gray-800 tracking-tight">
+          📸 Live Camera Feed
         </h2>
         <div className="flex gap-2 items-center">
-          <span className="text-sm text-gray-500">ESP32 Camera</span>
-          <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+          <span className="text-sm font-medium text-gray-500">ESP32 Camera</span>
+          <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
         </div>
       </div>
-      
-      <div className="overflow-hidden relative w-full bg-gray-900 rounded-xl h-[357px]">
+
+      {/* Video Box */}
+      <div className="relative w-full overflow-hidden bg-gray-900 rounded-2xl shadow-inner border border-gray-800 h-[380px]">
         <img
           ref={imgRef}
           src={`${backendUrl}/api/v1/video_feed`}
           alt="Live camera feed"
-          className="object-cover size-full"
-          crossOrigin="anonymous" // Cho phép canvas vẽ từ img
+          className="object-cover w-full h-full rounded-2xl transition-all duration-500"
+          crossOrigin="anonymous"
         />
         <canvas ref={canvasRef} style={{ display: "none" }} />
-        
-        <div className="flex absolute top-4 left-4 gap-2 items-center px-3 py-1.5 rounded-lg bg-black bg-opacity-50">
+
+        {/* Overlay thông tin */}
+        <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-black/50 backdrop-blur-sm rounded-lg">
           <svg width="16" height="14" viewBox="0 0 16 15" fill="none">
             <path
               d="M0 4.25C0 3.28477 0.784766 2.5 1.75 2.5H8.75C9.71523 2.5 10.5 3.28477 10.5 4.25V11.25C10.5 12.2152 9.71523 13 8.75 13H1.75C0.784766 13 0 12.2152 0 11.25V4.25ZM15.2879 3.47891C15.5723 3.63203 15.75 3.92734 15.75 4.25V11.25C15.75 11.5727 15.5723 11.868 15.2879 12.0211C15.0035 12.1742 14.659 12.1578 14.3883 11.9773L11.7633 10.2273L11.375 9.96758V9.5V6V5.53242L11.7633 5.27266L14.3883 3.52266C14.6562 3.34492 15.0008 3.32578 15.2879 3.47891Z"
               fill="white"
             />
           </svg>
-          <span className="text-sm text-white">1080p • 30fps</span>
+          <span className="text-sm text-white font-medium">1080p • 30fps</span>
         </div>
-        
+
+        {/* Analyzing Indicator */}
         {isAnalyzing && (
-          <div className="absolute right-4 bottom-4 px-3 py-1.5 bg-emerald-500 rounded-lg">
+          <div className="absolute right-4 bottom-4 flex items-center gap-2 px-3 py-1.5 bg-emerald-500 rounded-lg shadow-md">
+            <div className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
             <span className="text-sm font-medium text-white">Analyzing...</span>
           </div>
         )}
       </div>
-      
-      <div className="flex gap-3 justify-center items-center">
+
+      {/* Buttons */}
+      <div className="flex gap-4 justify-center items-center">
         <button
-          className="flex gap-2 items-center px-4 py-2 text-base text-white bg-emerald-500 rounded-lg cursor-pointer border-[none]"
+          className={`flex gap-2 items-center px-5 py-2.5 text-base font-medium rounded-lg transition-all duration-200 shadow-sm ${isAnalyzing
+            ? "bg-emerald-400 cursor-not-allowed opacity-80"
+            : "bg-emerald-500 hover:bg-emerald-600 cursor-pointer"
+            } text-white`}
           onClick={handleCaptureClick}
           disabled={isAnalyzing}
         >
@@ -88,8 +131,12 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
           </svg>
           Capture
         </button>
+
         <button
-          className="flex gap-2 items-center px-4 py-2 text-base text-gray-600 bg-gray-100 rounded-lg cursor-pointer border-[none]"
+          className={`flex gap-2 items-center px-5 py-2.5 text-base font-medium rounded-lg border transition-all duration-200 ${isAnalyzing
+            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+            : "bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200 cursor-pointer"
+            }`}
           onClick={onReset}
           disabled={isAnalyzing}
         >

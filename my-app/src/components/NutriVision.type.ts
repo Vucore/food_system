@@ -1,11 +1,13 @@
 export interface Food {
   id: number;
   name: string;
-  portion: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
+  restaurant: string;
+  address: string;
+  google_maps: string;
   icon: string;
   color: string;
+}
+
+export interface NutriVisionProps {
+  onSelectFood?: (food: any) => void;
 }
