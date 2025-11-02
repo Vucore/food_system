@@ -5,14 +5,14 @@ class ChatbotBase:
         # self.llm = CustomViQwen2LLM()
         # self.rag_agent = RAGAgentic(self.llm)
         self.rag_agent = RAGAgentic()
-    def generate_response_from_query(self, query: str):
-        response = self.rag_agent.call(query=query)
+    def generate_response(self, query: str, url: str, isBot: bool = True):
+        response = self.rag_agent.call(query=query, url=url, isBot=isBot)
         return response
 
-    def generate_response_from_url(self, url: str):
-        response = self.rag_agent.call(url=url)
-        return response
-
+    # def generate_response_from_url(self, url: str):
+    #     response = self.rag_agent.call(url=url, isBot=True)
+    #     return response
+    
 # if __name__ == "__main__":
 #     bot = ChatbotBase()
 #     query = input("Nhập câu hỏi về món ăn: ")
