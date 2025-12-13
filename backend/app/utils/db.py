@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 from bson import ObjectId
 load_dotenv()
+from typing import Optional
 
-
-_mongo_client: MongoClient | None = None
+_mongo_client: Optional[MongoClient] = None
 
 
 def _get_mongo_client() -> MongoClient:

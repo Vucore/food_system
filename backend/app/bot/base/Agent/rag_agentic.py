@@ -157,7 +157,7 @@
 
 
 
-from langchain.prompts import PromptTemplate
+# from langchain.prompts import PromptTemplate
 from app.bot.base.Agent.functions_router import function_router
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
@@ -167,32 +167,32 @@ class RAGAgentic:
         # Load model và tokenizer từ Hugging Face
         # self.llm = llm
         # Prompt cơ bản
-        self.prompt_template = PromptTemplate(
-            input_variables=["title", "ingredients", "preparation", "cookingSteps", "howToServe", "tips", "query"],
-            template="""
-                Bạn là một đầu bếp AI chuyên nghiệp, luôn trả lời bằng **tiếng Việt**, 
-                và chỉ sử dụng thông tin được cung cấp dưới đây. Không tự bịa hoặc thêm thông tin khác.
+        # self.prompt_template = PromptTemplate(
+        #     input_variables=["title", "ingredients", "preparation", "cookingSteps", "howToServe", "tips", "query"],
+        #     template="""
+        #         Bạn là một đầu bếp AI chuyên nghiệp, luôn trả lời bằng **tiếng Việt**, 
+        #         và chỉ sử dụng thông tin được cung cấp dưới đây. Không tự bịa hoặc thêm thông tin khác.
 
-                -----
-                THÔNG TIN MÓN ĂN:
-                • Tên món: {title}
-                • Nguyên liệu: {ingredients}
-                • Sơ chế: {preparation}
-                • Cách nấu: {cookingSteps}
-                • Cách dùng: {howToServe}
-                • Mẹo: {tips}
-                -----
+        #         -----
+        #         THÔNG TIN MÓN ĂN:
+        #         • Tên món: {title}
+        #         • Nguyên liệu: {ingredients}
+        #         • Sơ chế: {preparation}
+        #         • Cách nấu: {cookingSteps}
+        #         • Cách dùng: {howToServe}
+        #         • Mẹo: {tips}
+        #         -----
 
-                CÂU HỎI CỦA NGƯỜI DÙNG:
-                {query}
+        #         CÂU HỎI CỦA NGƯỜI DÙNG:
+        #         {query}
 
-                Hãy trả lời ngắn gọn, rõ ràng, đúng với câu hỏi với ngôn ngữ giao tiếp tự nhiên nhất có thể, KHÔNG thêm hashtag hoặc ký tự đặc biệt.
-                Nếu người dùng chỉ nhập tên món (ví dụ: “phở gà”), hãy tóm tắt ngắn gọn món ăn, không liệt kê toàn bộ chi tiết.
-                Nếu người dùng hỏi về nguyên liệu, chỉ nêu phần nguyên liệu.
-                Nếu hỏi về cách làm, hãy mô tả chi tiết các bước.
-                Nếu hỏi tổng quát, hãy trình bày đầy đủ gồm nguyên liệu, sơ chế, nấu, mẹo, cách dùng.
-            """
-        )
+        #         Hãy trả lời ngắn gọn, rõ ràng, đúng với câu hỏi với ngôn ngữ giao tiếp tự nhiên nhất có thể, KHÔNG thêm hashtag hoặc ký tự đặc biệt.
+        #         Nếu người dùng chỉ nhập tên món (ví dụ: “phở gà”), hãy tóm tắt ngắn gọn món ăn, không liệt kê toàn bộ chi tiết.
+        #         Nếu người dùng hỏi về nguyên liệu, chỉ nêu phần nguyên liệu.
+        #         Nếu hỏi về cách làm, hãy mô tả chi tiết các bước.
+        #         Nếu hỏi tổng quát, hãy trình bày đầy đủ gồm nguyên liệu, sơ chế, nấu, mẹo, cách dùng.
+        #     """
+        # )
 
         self.functions_name = ["crawl_all_monngonmoingay_query", "crawl_monngonmoingay_url", "crawl_only_monngonmoingay_query"]
 
