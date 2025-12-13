@@ -32,6 +32,7 @@ export const NutriVision: React.FC<NutriVisionProps> = ({ onSelectFood }) => {
   const handleShowMap = (food: any) => {
     setSelectedFoodForMap(food);
   };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header isLiveFeedActive={isLiveFeedActive} />
@@ -44,6 +45,7 @@ export const NutriVision: React.FC<NutriVisionProps> = ({ onSelectFood }) => {
             onReset={handleReset}
           />
         </div>
+
 
         {/* Cột phải: Detected Foods - Lớn hơn */}
         <div className="flex flex-col gap-6 max-w-full w-[700px]">

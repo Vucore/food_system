@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect, useCallback } from "react";
 import type { CameraFeedProps } from "./CameraFeed.type";
 const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
@@ -9,65 +9,106 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
 }) => {
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isMountedRef = useRef(true);
+  const handleCaptureRef = useRef<() => void>(() => { }); // Ref để lưu handleCaptureClick
 
-  const handleCaptureClick = () => {
+  const handleCaptureClick = useCallback(() => {
     const img = imgRef.current;
     const canvas = canvasRef.current;
 
     if (img && canvas) {
-      // Đặt kích thước canvas bằng kích thước ảnh thực
+      if (!img.complete || img.naturalWidth === 0) {
+        console.warn("Hình ảnh chưa tải xong hoặc bị lỗi");
+        return;
+      }
+
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
 
       const ctx = canvas.getContext("2d");
       if (ctx) {
         try {
-          // Vẽ frame hiện tại từ img lên canvas
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-          // Chuyển canvas thành blob JPEG
           canvas.toBlob((blob) => {
             if (blob) {
               const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
-              onCapture(file); // Gọi hàm xử lý từ props
+              onCapture(file); // Gửi file về backend
             }
-          }, "image/jpeg", 0.9); // quality = 0.9
-
+          }, "image/jpeg", 0.9);
         } catch (error) {
           console.error("Lỗi khi xử lý ảnh:", error);
-          createFakeImage();
         }
       }
     }
-  };
-  const createFakeImage = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  }, [onCapture]);
 
-    canvas.width = 640;
-    canvas.height = 480;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      // Tạo ảnh fake
-      ctx.fillStyle = "#87CEEB";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "#FFA500";
-      ctx.beginPath();
-      ctx.arc(320, 240, 50, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#000";
-      ctx.font = "20px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("Fake Food Image", 320, 450);
+  // Cập nhật ref mỗi khi handleCaptureClick thay đổi
+  useEffect(() => {
+    handleCaptureRef.current = handleCaptureClick;
+  }, [handleCaptureClick]);
 
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
-          onCapture(file);
-        }
-      }, "image/jpeg", 0.9);
+  useEffect(() => {
+    if (!backendUrl) {
+      console.error("VITE_BACKEND_URL chưa được cấu hình");
+      return;
     }
-  };
+
+    const wsUrl = `${backendUrl.replace(/^http/, "ws")}/api/v1/ws/button`;
+
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout;
+
+    const connectWebSocket = () => {
+      if (!isMountedRef.current) return;
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        if (isMountedRef.current) {
+          console.log("WebSocket connected");
+        }
+      };
+
+      ws.onmessage = (event) => {
+        if (isMountedRef.current) {
+          console.log("WebSocket message:", event.data);
+          if (event.data === "capture") {
+            handleCaptureRef.current();
+          }
+        }
+      };
+
+      ws.onerror = (error) => {
+        if (isMountedRef.current) {
+          console.error("WebSocket error:", error);
+        }
+      };
+
+      ws.onclose = () => {
+        if (isMountedRef.current) {
+          console.log("WebSocket disconnected, reconnecting...");
+          // Reconnect sau 3 giây
+          reconnectTimeout = setTimeout(connectWebSocket, 3000);
+        }
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      isMountedRef.current = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    };
+  }, []);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   return (
     <section className="flex flex-col gap-5 p-6 w-full bg-white rounded-2xl border border-gray-100 shadow-md">
