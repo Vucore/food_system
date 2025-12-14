@@ -1,7 +1,12 @@
+// Updated Header.tsx
 import React from "react";
 import type { HeaderProps } from "./Header.type";
 
-export const Header: React.FC<HeaderProps> = ({ isLiveFeedActive }) => {
+export const Header: React.FC<HeaderProps> = ({
+  isLiveFeedActive,
+  nutritionMode = false,
+  onToggleNutritionMode
+}) => {
   return (
     <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b shadow-sm">
       <div className="flex justify-between items-center max-w-7xl mx-auto px-6 py-4">
@@ -38,6 +43,28 @@ export const Header: React.FC<HeaderProps> = ({ isLiveFeedActive }) => {
               </span>
             </div>
           )}
+
+          {/* Nutrition Mode Toggle */}
+          <button
+            onClick={onToggleNutritionMode}
+            title={nutritionMode ? "Switch to Restaurant Mode" : "Switch to Nutrition Mode"}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition shadow-sm font-medium text-sm ${nutritionMode
+                ? "bg-blue-500 text-white hover:bg-blue-600"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+            <span>{nutritionMode ? "Restaurant" : "Nutrition"}</span>
+          </button>
 
           <button
             title="Settings"

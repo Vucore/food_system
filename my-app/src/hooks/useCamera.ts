@@ -1,13 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Food } from '../components/NutriVision.type';
 
-const backendUrl = "http://localhost:8000"; // Thay thế bằng URL backend
+export interface NutritionData {
+  predicted_class: string;
+  confidence: number;
+  nutrition_info: {
+    Vietnamese_Name: string;
+    English_Name: string;
+    Name: string;
+    Water: number;
+    Energy: number;
+    Protein: number;
+    Total_lipid_fat: number;
+    Carbohydrate_by_difference: number;
+    Calcium_Ca: number;
+    Iron_Fe: number;
+    Magnesium_Mg: number;
+    Potassium_K: number;
+    Sodium_Na: number;
+  };
+}
 
 export interface UseCameraResult {
   isAnalyzing: boolean;
   handleCapture: (imageFile?: File) => Promise<void>;
   handleReset: () => void;
   detectedFoods: Food[];
+  nutritionData: NutritionData | null;
+  nutritionMode: boolean;
+  setNutritionMode: (mode: boolean) => void;
 }
 
 function getUserId(): string {
@@ -22,114 +43,162 @@ function getUserId(): string {
 export function useCamera(): UseCameraResult {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [detectedFoods, setDetectedFoods] = useState<Food[]>([]);
+  const [nutritionData, setNutritionData] = useState<NutritionData | null>(null);
+  const [nutritionMode, setNutritionMode] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Lắng nghe WebSocket từ ESP32 button
   useEffect(() => {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL;
     if (!backendUrl) return;
 
     const wsUrl = `${backendUrl.replace(/^http/, "ws")}/api/v1/ws/button`;
-    const ws = new WebSocket(wsUrl);
 
-    ws.onopen = () => {
-      console.log("WebSocket connected for button events");
-    };
-
-    ws.onmessage = (event) => {
-      console.log("WebSocket message received:", event.data);
-      try {
-        const message = JSON.parse(event.data);
-
-        if (message.type === "capture_result") {
-          console.log("Button capture result:", message.data);
-          const response = message.data;
-
-          if (response.success && response.detected_foods) {
-            const foods: Food[] = (response.detected_foods ?? []).map((f: any, idx: number) => ({
-              id: f._id ?? f.id ?? idx + 1,
-              name: f.name ?? 'Unknown',
-              restaurant: f.restaurant ?? '',
-              address: f.address ?? '',
-              google_maps: f.google_maps ?? '',
-              icon: f.icon ?? 'food',
-              color: f.color ?? '#E5E7EB',
-            }));
-
-            console.log("Mapped foods from button:", foods);
-            setDetectedFoods(foods);
-            setIsAnalyzing(false);
-          }
-        }
-      } catch (error) {
-        console.error("Error parsing WebSocket message:", error);
+    const connectWebSocket = () => {
+      if (wsRef.current) {
+        wsRef.current.close();
       }
+
+      console.log("Connecting to WebSocket:", wsUrl);
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log("✅ WebSocket connected for button events");
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
+
+        // Gửi thông tin mode hiện tại
+        ws.send(JSON.stringify({
+          type: "set_mode",
+          mode: nutritionMode ? "nutrition" : "restaurant"
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          console.log("📨 WebSocket message received:", message);
+
+          if (message.type === "capture_result") {
+            // Restaurant mode result
+            const newFood = message.data.new_food;
+            if (newFood) {
+              setDetectedFoods((prev) => [newFood, ...prev]);
+            }
+          } else if (message.type === "nutrition_result") {
+            // Nutrition mode result
+            const data = message.data;
+            if (data) {
+              setNutritionData({
+                predicted_class: data.predicted_class,
+                confidence: data.confidence,
+                nutrition_info: data.nutrition_data
+              });
+            }
+          } else if (message.type === "mode_updated") {
+            console.log("✅ Mode updated on server:", message.mode);
+          }
+        } catch (error) {
+          console.error("Error parsing WebSocket message:", error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error("❌ WebSocket error:", error);
+      };
+
+      ws.onclose = () => {
+        console.log("🔌 WebSocket disconnected, reconnecting in 3s...");
+        reconnectTimeoutRef.current = setTimeout(connectWebSocket, 3000);
+      };
     };
 
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-
-    ws.onclose = () => {
-      console.log("WebSocket disconnected");
-    };
+    connectWebSocket();
 
     return () => {
-      ws.close();
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
-  }, []);
-  // Nhận file ảnh từ CameraFeed component
+  }, []); // Chỉ connect 1 lần
+
+  // Send mode update when nutrition mode changes
+  useEffect(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: "set_mode",
+        mode: nutritionMode ? "nutrition" : "restaurant"
+      }));
+      console.log("📤 Sent mode update:", nutritionMode ? "nutrition" : "restaurant");
+    }
+  }, [nutritionMode]);
+
   const handleCapture = async (imageFile?: File) => {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL;
+    if (!backendUrl) return;
+
     setIsAnalyzing(true);
+    const userId = getUserId();
 
     try {
       if (!imageFile) {
-        console.error("Không có file ảnh để gửi");
-        setIsAnalyzing(false);
+        console.error("No image file provided");
         return;
       }
 
-      await sendImageToBackend(imageFile);
-    } catch (error) {
-      console.error("Lỗi gửi ảnh:", error);
-      setIsAnalyzing(false);
-    }
-  };
-  const sendImageToBackend = async (fileToSend: File) => {
-    try {
       const formData = new FormData();
-      formData.append("file", fileToSend);
-      formData.append("user_id", getUserId());
+      formData.append("file", imageFile);
+      formData.append("user_id", userId);
+      formData.append("mode", nutritionMode ? "nutrition" : "restaurant");
 
-      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/capture`, {
+      const response = await fetch(`${backendUrl}/api/v1/capture`, {
         method: "POST",
         body: formData,
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        const foods: Food[] = (data?.detected_foods ?? []).map((f: any, idx: number) => ({
-          id: f._id ?? f.id ?? idx + 1,
-          name: f.name ?? 'Unknown',
-          restaurant: f.restaurant ?? '',
-          address: f.address ?? '',
-          google_maps: f.google_maps ?? '',
-          icon: f.icon ?? 'food',
-          color: f.color ?? '#E5E7EB',
-        }));
-        setDetectedFoods(foods);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (nutritionMode) {
+        setNutritionData({
+          predicted_class: data.predicted_class,
+          confidence: data.confidence,
+          nutrition_info: data.nutrition_data
+        });
       } else {
-        console.error("Lỗi từ backend:", res.status);
+        if (data.detected_foods && data.detected_foods.length > 0) {
+          setDetectedFoods(data.detected_foods);
+        }
       }
     } catch (error) {
-      console.error("Lỗi gửi ảnh:", error);
+      console.error("Error capturing image:", error);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const handleReset = () => {
-    setIsAnalyzing(false);
     setDetectedFoods([]);
-    localStorage.removeItem("user_id");
+    setNutritionData(null);
   };
 
-  return { isAnalyzing, handleCapture, handleReset, detectedFoods };
+  return {
+    isAnalyzing,
+    handleCapture,
+    handleReset,
+    detectedFoods,
+    nutritionData,
+    nutritionMode,
+    setNutritionMode,
+  };
 }
