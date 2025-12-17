@@ -1,5 +1,3 @@
-from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnableSequence
 from langchain.tools import tool
 import requests
 from bs4 import BeautifulSoup
@@ -8,27 +6,6 @@ import re
 from dotenv import load_dotenv
 load_dotenv() 
 
-# Viết mail
-# def generate_email(username, address, date):
-#     llm = load_model_Llama3(temperature=0.1)
-#     prompt = PromptTemplate(
-#         input_variables=["username", "address", "date"],
-#         template=(
-#             "Bạn là một trợ lý AI. Bạn sẽ đại diện cho `Hệ thống gửi mail tự động` để viết email chuyên nghiệp bằng tiếng Việt\n"
-#             "Nội dung gmail là cảnh báo lũ lụt đến người nhận\n"
-#             "Thông tin người nhận:\n"
-#             "- Tên: {username}\n"
-#             "- Địa chỉ: {address}\n"
-#             "- Thời điểm hiện tại: {date}\n\n"
-#             "Hãy viết một email hoàn chỉnh, nội dung rõ ràng, giọng văn phù hợp bằng tiếng Việt chỉ trả về nội dung email mà bạn viết, không thêm bất kỳ văn bản nào khác.\n\n"
-#         )
-#     )
-#     chain: RunnableSequence = prompt | llm
-#     return chain.invoke({
-#         "username": username,
-#         "address": address,
-#         "date" : date
-#     })
 
 @tool
 def search_all_monngonmoingay(query: str):

@@ -179,14 +179,13 @@
 #         cap.release()
 #         cap = None
 import cv2
-import requests
 import time
 import threading
     
 
-cap = cv2.VideoCapture("http://10.150.38.30:81/stream")    
-# cap = cv2.VideoCapture("http://192.168.1.53:81/stream")
-# cap = cv2.VideoCapture("http://172.20.10.13:81/stream")   10.150.38.30
+# cap = cv2.VideoCapture("http://10.150.38.30:81/stream")     #Vucore 
+cap = cv2.VideoCapture("http://192.168.1.53:81/stream")  # 3 TG
+# cap = cv2.VideoCapture("http://172.20.10.13:81/stream")   
 # Shared frame buffer
 current_frame = None
 frame_lock = threading.Lock()
@@ -204,7 +203,7 @@ def generate():
                 print("Mất kết nối camera, thử lại sau 2 giây...")
                 time.sleep(2)
                 cap.release()
-                cap.open("http://10.150.38.30:81/stream")
+                cap.open("http://192.168.1.53:81/stream")
                 retry_count = 0
             else:
                 time.sleep(0.2)

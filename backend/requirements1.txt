@@ -1,0 +1,10 @@
+langchain
+bs4
+fastapi
+requests
+uvicorn
+python-dotenv
+opencv-python
+pymongo
+tensorflow
+python-multipart

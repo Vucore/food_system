@@ -1,96 +1,141 @@
-from datetime import datetime
+# endpoints.py
 import json
 from fastapi import APIRouter, Response, UploadFile, File, HTTPException, Query
 from pydantic import BaseModel
 from app.utils.camera import generate, get_capture
 from fastapi.responses import JSONResponse, StreamingResponse
 import logging
-from fastapi import WebSocket, WebSocketDisconnect
-from typing import List
+from fastapi import WebSocket
+from typing import List, Dict
 
-from app.models.load_model import FoodModelPredictor
 from ...bot.init import ChatbotBase
 from fastapi import Form
 from app.utils.db import get_db, serialize_mongo_document
-from PIL import Image
-from app.utils.food_db import FoodDatabase
 import os
-import io
 from fastapi import WebSocket
+
+# Import AI Predict Service
+from app.core.ai_predict import get_ai_service, predict_food_cascade
+from app.models.load_model_nutrition import create_nutrition_predictor
+from pathlib import Path
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-active_websockets: List[WebSocket] = []
-bot = ChatbotBase()
-# predictor = FoodModelPredictor(model_path="/mnt/d/Công Nghệ IoT/CK/backend/app/models/my_food_model.keras")
-predictor = FoodModelPredictor(model_path="D:\\Công Nghệ IoT\\CK\\backend\\app\\models\\modelFood.keras")
-food_db = FoodDatabase(json_path="D:\\Công Nghệ IoT\\CK\\backend\\app\\data\\food_database.json")
 
-save_dir = "./images"
+# Lưu thông tin WebSocket clients với mode của họ
+class WebSocketClient:
+    def __init__(self, websocket: WebSocket, mode: str = "restaurant"):
+        self.websocket = websocket
+        self.mode = mode  # "restaurant" hoặc "nutrition"
+
+active_websockets: List[WebSocketClient] = []
+bot = ChatbotBase()
+
+# Khởi tạo AI service khi startup
+ai_service = get_ai_service(save_dir="./images")
+
+# Khởi tạo Nutrition service
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+nutrition_predictor = None
+try:
+    nutrition_predictor = create_nutrition_predictor(
+        model_path=str(BASE_DIR / "models" / "best_swinS_food_Nutri.pth"),  # Thay đổi tên model của bạn
+        nutrition_csv_path=str(BASE_DIR / "data" / "Get_Nutrition.csv")
+    )
+    logger.info("✅ Nutrition predictor loaded successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to load nutrition predictor: {e}")
+
 
 @router.post("/capture")
-async def capture(file: UploadFile = File(...),  user_id: str = Form("anonymous")):
-    # Nhận file ảnh từ frontend
-    image_data = await file.read()
-    os.makedirs(save_dir, exist_ok=True)
-    filename = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + file.filename
-    save_path = os.path.join(save_dir, filename)
-    with open(save_path, "wb") as f:
-        f.write(image_data)
-    print(f"Ảnh đã được lưu tại: {save_path}")
-    # Xử lý ảnh 
-    # image = Image.open(io.BytesIO(image_data))
-    result_predict = predictor.predict(image_path=save_path)
-    predicted_name = result_predict['predicted_class']
-    confidence = result_predict['confidence']
-    print(f"Dự đoán: {result_predict['predicted_class']}")
-    print(f"Độ tin cậy: {result_predict['confidence']}%")
-    # # Lấy thông tin từ JSON - random chọn 1 nhà hàng
-    food_info = food_db.get_food_by_name(predicted_name)
-        
-    if not food_info:
-        # Fallback nếu không tìm thấy
-        food_info = {
-            "food_name": predicted_name,
-            "restaurant_name": "Unknown",
-            "address": "Unknown",
-            "google_maps": ""
-        }
-    all_restaurants = food_db.get_all_restaurants_for_food(predicted_name)
-    ai_result = {
-            "user_id": user_id,
-            "name": food_info["food_name"],
-            "restaurant": food_info["restaurant_name"],
-            "address": food_info["address"],
-            "google_maps": food_info["google_maps"],
-            "all_restaurants": all_restaurants,  # Lưu tất cả nhà hàng
-            "image_path": save_path,
-            "confidence": confidence,
-            "predicted_class": predicted_name,
-            "created_at": datetime.now().isoformat()
-        }    
+async def capture(
+    file: UploadFile = File(...), 
+    user_id: str = Form("anonymous"),
+    mode: str = Form("restaurant")  # Thêm mode parameter
+):
+    """Endpoint để capture ảnh từ frontend"""
     try:
-        db = get_db()
-        # Lưu dữ liệu vào collection 'foods'
-        inserted_id = db["foods"].insert_one(ai_result).inserted_id
-
-        # Truy vấn chỉ lấy món ăn của user hiện tại
-        foods_cursor = db["foods"].find({"user_id": user_id}).sort([("_id", -1)])
-        foods = [serialize_mongo_document(doc) for doc in foods_cursor]
-        return {
-            "success": True,
-            "detected_foods": foods,
-        }
+        # Nhận file ảnh từ frontend
+        image_data = await file.read()
+        
+        if mode == "nutrition":
+            # Xử lý nutrition mode
+            if nutrition_predictor is None:
+                raise HTTPException(status_code=500, detail="Nutrition predictor not available")
+            
+            # Lưu ảnh tạm
+            from datetime import datetime
+            timestamp_filename = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + file.filename
+            image_path = os.path.join("./images", timestamp_filename)
+            os.makedirs("./images", exist_ok=True)
+            
+            with open(image_path, "wb") as f:
+                f.write(image_data)
+            
+            # Dự đoán nutrition
+            result = nutrition_predictor.predict(image_path)
+            
+            nutrition_result = {
+                "success": True,
+                "user_id": user_id,
+                "mode": "nutrition",
+                "predicted_class": result["predicted_class"],
+                "confidence": result["confidence"],
+                "nutrition_info": result["nutrition_info"],
+                "image_path": image_path,
+                "created_at": datetime.now().isoformat()
+            }
+            
+            # Lưu vào database
+            db = get_db()
+            inserted_id = db["nutrition_detections"].insert_one(nutrition_result).inserted_id
+            
+            return {
+                "success": True,
+                "mode": "nutrition",
+                "nutrition_data": result["nutrition_info"],
+                "predicted_class": result["predicted_class"],
+                "confidence": result["confidence"]
+            }
+        else:
+            # Xử lý restaurant mode (code cũ)
+            ai_result = predict_food_cascade(
+                image_data=image_data,
+                filename=file.filename,
+                user_id=user_id,
+                for_esp32=False
+            )
+            
+            # Lưu vào database
+            db = get_db()
+            inserted_id = db["foods"].insert_one(ai_result).inserted_id
+            
+            # Truy vấn lấy món ăn của user hiện tại
+            foods_cursor = db["foods"].find({"user_id": user_id}).sort([("_id", -1)])
+            foods = [serialize_mongo_document(doc) for doc in foods_cursor]
+            
+            return {
+                "success": ai_result["success"],
+                "mode": "restaurant",
+                "detected_foods": foods,
+            }
+            
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi truy vấn MongoDB: {e}")
+        logger.error(f"Error in capture: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Lỗi xử lý: {e}")
+
 
 @router.get('/video_feed')
 def video_feed():
+    """Stream video feed"""
     return StreamingResponse(generate(), media_type='multipart/x-mixed-replace; boundary=frame')
+
 
 @router.get("/proxy_capture")
 def proxy_capture():
+    """Proxy để capture ảnh từ camera"""
     content = get_capture()
     return Response(content=content, media_type="image/jpeg")
 
@@ -101,6 +146,7 @@ async def chatbot_recipe(
     url: str = Query(None, description="URL của món ăn trên monngonmoingay.com"),
     isbot: bool = Query(True, description="True: sử dụng bot mode, False: sử dụng user mode")
 ):
+    """Endpoint chatbot để hỏi về công thức nấu ăn"""
     try:
         result = bot.generate_response(query=query, url=url, isBot=isbot)
         if isinstance(result, dict):
@@ -108,6 +154,7 @@ async def chatbot_recipe(
         return {"message": result}
     except Exception as e:
         return {"error": str(e)}
+
 
 @router.get("/config/maps-api-key")
 async def get_maps_api_key():
@@ -120,11 +167,14 @@ async def get_maps_api_key():
         )
     return {"apiKey": api_key}
 
+
 class ButtonEvent(BaseModel):
-    user_id : str = "anonymous"
+    user_id: str = "anonymous"
+
 
 @router.post("/capture/button")
 async def capture_event(event: ButtonEvent):
+    """Endpoint để xử lý sự kiện nhấn nút từ ESP32"""
     logger.info(f"ESP32 button pressed! {event.dict()}")
     
     try:
@@ -135,109 +185,146 @@ async def capture_event(event: ButtonEvent):
         image_content = get_capture()
         logger.info(f"[2] Image captured, size: {len(image_content)} bytes")
         
-        # Lưu ảnh
-        os.makedirs(save_dir, exist_ok=True)
-        filename = datetime.now().strftime("%Y%m%d_%H%M%S") + "_esp32_capture.jpg"
-        save_path = os.path.join(save_dir, filename)
+        # Xử lý cho TỪNG client dựa trên mode của họ
+        for client in active_websockets:
+            try:
+                mode = client.mode
+                logger.info(f"[3] Processing for client in {mode} mode")
+                
+                if mode == "nutrition":
+                    # Xử lý Nutrition Mode
+                    if nutrition_predictor is None:
+                        logger.error("Nutrition predictor not available")
+                        continue
+                    
+                    # Lưu ảnh tạm
+                    from datetime import datetime
+                    timestamp_filename = datetime.now().strftime("%Y%m%d_%H%M%S") + "_esp32_capture.jpg"
+                    image_path = os.path.join("./images", timestamp_filename)
+                    os.makedirs("./images", exist_ok=True)
+                    
+                    with open(image_path, "wb") as f:
+                        f.write(image_content)
+                    
+                    # Dự đoán nutrition
+                    result = nutrition_predictor.predict(image_path)
+                    logger.info(f"[4] Nutrition prediction: {result['predicted_class']} ({result['confidence']}%)")
+                    
+                    nutrition_result = {
+                        "success": True,
+                        "user_id": user_id,
+                        "mode": "nutrition",
+                        "predicted_class": result["predicted_class"],
+                        "confidence": result["confidence"],
+                        "nutrition_info": result["nutrition_info"],
+                        "image_path": image_path,
+                        "created_at": datetime.now().isoformat()
+                    }
+                    
+                    # Lưu vào database
+                    db = get_db()
+                    insert_result = db["nutrition_detections"].insert_one(nutrition_result)
+                    logger.info(f"[5] Saved to nutrition_detections DB")
+                    
+                    # Gửi qua WebSocket
+                    websocket_message = {
+                        "type": "nutrition_result",
+                        "data": {
+                            "success": True,
+                            "mode": "nutrition",
+                            "nutrition_data": result["nutrition_info"],
+                            "predicted_class": result["predicted_class"],
+                            "confidence": result["confidence"]
+                        }
+                    }
+                    
+                else:
+                    # Xử lý Restaurant Mode (code cũ)
+                    ai_result = predict_food_cascade(
+                        image_data=image_content,
+                        filename="esp32_capture.jpg",
+                        user_id=user_id,
+                        for_esp32=True
+                    )
+                    logger.info(f"[4] Restaurant prediction: {ai_result['name']} ({ai_result['confidence']}%)")
+                    
+                    # Lưu vào database
+                    db = get_db()
+                    insert_result = db["foods"].insert_one(ai_result)
+                    logger.info(f"[5] Saved to foods DB")
+                    
+                    # Serialize món ăn mới
+                    new_food = serialize_mongo_document(ai_result)
+                    new_food['_id'] = str(insert_result.inserted_id)
+                    
+                    # Gửi qua WebSocket
+                    websocket_message = {
+                        "type": "capture_result",
+                        "data": {
+                            "success": ai_result["success"],
+                            "mode": "restaurant",
+                            "new_food": new_food
+                        }
+                    }
+                
+                # Gửi message cho client này
+                await client.websocket.send_text(json.dumps(websocket_message))
+                logger.info(f"[6] Sent WebSocket message to client ({mode} mode)")
+                
+            except Exception as client_error:
+                logger.error(f"Error processing for client: {client_error}")
         
-        with open(save_path, "wb") as f:
-            f.write(image_content)
-        logger.info(f"[3] Image saved to: {save_path}")
-        
-        # Xử lý AI
-        result_predict = predictor.predict(image_path=save_path)
-        predicted_name = result_predict['predicted_class']
-        confidence = result_predict['confidence']
-        logger.info(f"[4] Predicted: {predicted_name}, Confidence: {confidence}")
-        
-        food_info = food_db.get_food_by_name(predicted_name)
-        logger.info(f"[5] Food info found: {food_info is not None}")
-        
-        if not food_info:
-            food_info = {
-                "food_name": predicted_name,
-                "restaurant_name": "Unknown",
-                "address": "Unknown",
-                "google_maps": ""
-            }
-        
-        all_restaurants = food_db.get_all_restaurants_for_food(predicted_name)
-        logger.info(f"[6] Restaurants found: {len(all_restaurants)}")
-        
-        ai_result = {
-            "user_id": user_id,
-            "name": food_info["food_name"],
-            "restaurant": food_info["restaurant_name"],
-            "address": food_info["address"],
-            "google_maps": food_info["google_maps"],
-            "all_restaurants": all_restaurants,
-            "image_path": save_path,
-            "confidence": float(confidence),
-            "predicted_class": predicted_name,
-            "created_at": datetime.now().isoformat()
-        }
-        logger.info(f"[7] AI result created: {ai_result['name']}")
-        
-        try:
-            db = get_db()
-            logger.info("[8] Connected to MongoDB")
-            
-            # Lưu dữ liệu vào collection 'foods'
-            insert_result = db["foods"].insert_one(ai_result)
-            logger.info(f"[9] Inserted to DB with ID: {insert_result.inserted_id}")
-            
-            # Truy vấn chỉ lấy món ăn của user hiện tại
-            foods_cursor = db["foods"].find({"user_id": user_id}).sort([("_id", -1)])
-            foods = [serialize_mongo_document(doc) for doc in foods_cursor]
-            logger.info(f"[10] Retrieved {len(foods)} foods from DB")
-            
-            response = {
-                "success": True,
-                "detected_foods": foods,
-            }
-            logger.info(f"[11] Sending response with {len(foods)} foods")
-            
-            # **GỬI QUA WEBSOCKET CHO FRONTEND**
-            websocket_message = {
-                "type": "capture_result",
-                "data": response
-            }
-            
-            for ws in active_websockets:
-                try:
-                    await ws.send_text(json.dumps(websocket_message))
-                    logger.info(f"[12] Sent WebSocket message to frontend")
-                except Exception as ws_error:
-                    logger.error(f"Error sending WebSocket: {ws_error}")
-            
-            return response
-            
-        except Exception as ex:
-            logger.error(f"[ERROR at DB] Error saving to DB: {ex}", exc_info=True)
-            return {"status": "error", "message": f"Database error: {ex}"}
+        return {"status": "success", "message": "Processed for all connected clients"}
             
     except Exception as e:
         logger.error(f"[ERROR at capture] Error processing capture: {e}", exc_info=True)
         return {"status": "error", "message": str(e)}
-    
+
+
 @router.websocket("/ws/button")
 async def websocket_button(websocket: WebSocket):
+    """WebSocket endpoint để nhận real-time updates"""
+    client = None
     try:
         await websocket.accept()
         logger.info("WebSocket client connected")
-        active_websockets.append(websocket)
+        
+        # Tạo client với mode mặc định
+        client = WebSocketClient(websocket, mode="restaurant")
+        active_websockets.append(client)
         
         while True:
-            # Giữ kết nối mở, chỉ lắng nghe ping/pong
             try:
+                # Nhận message từ frontend
                 data = await websocket.receive_text()
-                logger.info(f"WebSocket message: {data}")
-            except:
+                logger.info(f"WebSocket message received: {data}")
+                
+                # Parse message
+                try:
+                    message = json.loads(data)
+                    
+                    # Cập nhật mode nếu frontend gửi
+                    if message.get("type") == "set_mode":
+                        new_mode = message.get("mode", "restaurant")
+                        client.mode = new_mode
+                        logger.info(f"Client mode updated to: {new_mode}")
+                        
+                        # Gửi xác nhận
+                        await websocket.send_text(json.dumps({
+                            "type": "mode_updated",
+                            "mode": new_mode
+                        }))
+                        
+                except json.JSONDecodeError:
+                    logger.warning(f"Invalid JSON received: {data}")
+                    
+            except Exception as e:
+                logger.error(f"Error in WebSocket loop: {e}")
                 break
                 
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
     finally:
-        if websocket in active_websockets:
-            active_websockets.remove(websocket)
+        if client and client in active_websockets:
+            active_websockets.remove(client)
         logger.info("WebSocket client disconnected")
